@@ -92,7 +92,60 @@ QCA_NUM(txpower) QCA_NUM(txpower_offset) QCA_NUM(signal)
 QCA_NUM(noise) QCA_NUM(quality) QCA_NUM(quality_max) QCA_NUM(mbssid_support)
 QCA_STR(ssid) QCA_STR(bssid) QCA_STR(country) QCA_STR(hardware_id)
 QCA_STR(hardware_name) QCA_STR(encryption) QCA_STR(phyname) QCA_STR(lookup_phy)
-QCA_LIST(assoclist) QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+
+static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *entry)
+{
+	char mac[18], tx[8], rx[8];
+	unsigned long tx_rate, rx_rate;
+	int signal, i;
+	if (sscanf(line, "%17s %*u %*u %7[0-9]M %7[0-9]M %4d", mac, tx, rx, &signal) != 4 ||
+	    strlen(mac) != 17 || signal < -128 || signal > 0) return -1;
+	tx_rate = strtoul(tx, NULL, 10);
+	rx_rate = strtoul(rx, NULL, 10);
+	if (tx_rate > UINT32_MAX / 1000 || rx_rate > UINT32_MAX / 1000) return -1;
+	for (i = 0; i < 17; i++)
+		if (i % 3 == 2 ? mac[i] != ':' : !isxdigit((unsigned char)mac[i])) return -1;
+	memset(entry, 0, sizeof(*entry));
+	for (i = 0; i < 6; i++) entry->mac[i] = strtoul(mac + 3 * i, NULL, 16);
+	entry->signal = signal;
+	entry->rx_rate.rate = rx_rate * 1000;
+	entry->tx_rate.rate = tx_rate * 1000;
+	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
+	return 0;
+}
+
+static int qca_assoclist(const char *name, char *buf, int *len)
+{
+	const char *vif = qca_resolve(name);
+	char command[96], line[512];
+	struct iwinfo_assoclist_entry entry;
+	FILE *fp;
+	int noise = 0, ch;
+	*len = 0;
+	if (!vif) return -1;
+	if (!nl80211_ops.assoclist(vif, buf, len) && *len > 0) return 0;
+	*len = 0;
+	/* QSDK can return an empty nl80211 dump while its native station list is populated. */
+	if (!qca_name(vif) || vif[0] == '-') return -1;
+	snprintf(command, sizeof(command), "/usr/sbin/wlanconfig %s list sta 2>/dev/null", vif);
+	fp = popen(command, "r");
+	if (!fp) return -1;
+	qca_noise(vif, &noise);
+	while (fgets(line, sizeof(line), fp)) {
+		if (!strchr(line, '\n') && !feof(fp)) {
+			while ((ch = fgetc(fp)) != '\n' && ch != EOF) { }
+			continue;
+		}
+		if (qca_parse_station(line, &entry) || *len + sizeof(entry) > IWINFO_BUFSIZE) continue;
+		entry.noise = noise;
+		memcpy(buf + *len, &entry, sizeof(entry));
+		*len += sizeof(entry);
+	}
+	if (ferror(fp)) { pclose(fp); *len = 0; return -1; }
+	if (pclose(fp)) { *len = 0; return -1; }
+	return 0;
+}
 
 static int qca_bitrate(const char *name, int *buf)
 {

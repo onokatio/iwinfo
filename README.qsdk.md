@@ -4,6 +4,8 @@ QSDK の `wifi*` ラジオと `ath*` VAP を扱う `qcawificfg80211` バック�
 
 6 GHz のチャンネル変換、QSDK の VAP ごとの hostapd ファイル、HE/EHT と 320 MHz の機能情報、SAE/OWE の表示に対応しています。既存の `iwinfo_ops` と一覧データの構造体レイアウトは維持しています。
 
-`BACKENDS='nl80211 qcawificfg80211'` でビルドしてください。`tests/qsdk-selfcheck.c` でインターフェース名の検証、HE/EHT の機能情報の解析、QSDK の転送速度の単位変換を確認できます。
+接続端末の一覧がnl80211で空になる場合は、本体の `/usr/sbin/wlanconfig <VAP> list sta` からMACアドレス・信号強度・送受信速度を取得します。これらを既存のiwinfo形式で返すため、LuCIの標準Associated Stationsに表示できます。取得に失敗した場合は端末情報を返しません。
+
+`BACKENDS='nl80211 qcawificfg80211'` でビルドしてください。`tests/qsdk-selfcheck.c` でインターフェース名の検証、HE/EHT の機能情報の解析、QSDK の転送速度の単位変換、接続端末一覧の取得と不正な入力・コマンド失敗時の処理を確認できます。
 
 WN-7T94XR v2.5.1 用のビルド手順と IPK は [LuCI フォーク](https://github.com/onokatio/luci/tree/qsdk-wn7t94xr/contrib/wn7t94xr)にあります。本体のドライバーは変更しません。接続クライアントの EHT レート情報や、他機種での動作は未検証です。
