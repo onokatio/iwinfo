@@ -29,6 +29,8 @@
 #define IWINFO_80211_N       (1 << 3)
 #define IWINFO_80211_AC      (1 << 4)
 #define IWINFO_80211_AD      (1 << 5)
+#define IWINFO_80211_AX      (1 << 6)
+#define IWINFO_80211_BE      (1 << 7)
 
 #define IWINFO_CIPHER_NONE   (1 << 0)
 #define IWINFO_CIPHER_WEP40  (1 << 1)
@@ -89,7 +91,16 @@ enum iwinfo_htmode {
 	IWINFO_HTMODE_VHT80_80   = (1 << 5),
 	IWINFO_HTMODE_VHT160     = (1 << 6),
 
-	IWINFO_HTMODE_COUNT      = 7
+	IWINFO_HTMODE_HE20       = (1 << 7),
+	IWINFO_HTMODE_HE40       = (1 << 8),
+	IWINFO_HTMODE_HE80       = (1 << 9),
+	IWINFO_HTMODE_HE160      = (1 << 10),
+	IWINFO_HTMODE_EHT20      = (1 << 11),
+	IWINFO_HTMODE_EHT40      = (1 << 12),
+	IWINFO_HTMODE_EHT80      = (1 << 13),
+	IWINFO_HTMODE_EHT160     = (1 << 14),
+	IWINFO_HTMODE_EHT320     = (1 << 15),
+	IWINFO_HTMODE_COUNT      = 16
 };
 
 extern const char *IWINFO_HTMODE_NAMES[IWINFO_HTMODE_COUNT];
@@ -256,6 +267,7 @@ void iwinfo_finish(void);
 extern const struct iwinfo_ops wext_ops;
 extern const struct iwinfo_ops madwifi_ops;
 extern const struct iwinfo_ops nl80211_ops;
+extern const struct iwinfo_ops qcawificfg80211_ops;
 extern const struct iwinfo_ops wl_ops;
 
 #include "iwinfo/utils.h"

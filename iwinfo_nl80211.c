@@ -592,6 +592,10 @@ static int nl80211_freq2channel(int freq)
 		return (freq - 2407) / 5;
 	else if (freq >= 4910 && freq <= 4980)
 		return (freq - 4000) / 5;
+	else if (freq == 5935)
+		return 2;
+	else if (freq >= 5955 && freq <= 7115)
+		return (freq - 5950) / 5;
 	else if(freq >= 56160 + 2160 * 1 && freq <= 56160 + 2160 * 6)
 		return (freq - 56160) / 2160;
 	else
@@ -757,6 +761,12 @@ static int __nl80211_hostapd_query(const char *ifname, ...)
 
 	snprintf(buf, sizeof(buf), "/var/run/hostapd-%s.conf", phy);
 	fp = fopen(buf, "r");
+	if (!fp && strlen(ifname) < IFNAMSIZ && !strchr(ifname, '/'))
+	{
+		/* QSDK writes one configuration per VAP, including MLO links. */
+		snprintf(buf, sizeof(buf), "/var/run/hostapd-%s.conf", ifname);
+		fp = fopen(buf, "r");
+	}
 
 	if (!fp)
 		return 0;

@@ -37,6 +37,8 @@ const char *IWINFO_KMGMT_NAMES[] = {
 	"NONE",
 	"802.1X",
 	"PSK",
+	"SAE",
+	"OWE",
 };
 
 const char *IWINFO_AUTH_NAMES[] = {
@@ -65,6 +67,8 @@ const char *IWINFO_HTMODE_NAMES[] = {
 	"VHT80",
 	"VHT80+80",
 	"VHT160",
+	"HE20", "HE40", "HE80", "HE160",
+	"EHT20", "EHT40", "EHT80", "EHT160", "EHT320",
 };
 
 
@@ -324,6 +328,9 @@ const struct iwinfo_iso3166_label IWINFO_ISO3166_NAMES[] = {
 };
 
 static const struct iwinfo_ops *backends[] = {
+#ifdef USE_QCA
+	&qcawificfg80211_ops,
+#endif
 #ifdef USE_NL80211
 	&nl80211_ops,
 #endif

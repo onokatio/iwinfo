@@ -271,18 +271,20 @@ static char * format_encryption(struct iwinfo_crypto_entry *c)
 
 static char * format_hwmodes(int modes)
 {
-	static char buf[15];
+	static char buf[24];
 
 	if (modes <= 0)
 		snprintf(buf, sizeof(buf), "unknown");
 	else
-		snprintf(buf, sizeof(buf), "802.11%s%s%s%s%s%s",
+		snprintf(buf, sizeof(buf), "802.11%s%s%s%s%s%s%s%s",
 			(modes & IWINFO_80211_A) ? "a" : "",
 			(modes & IWINFO_80211_B) ? "b" : "",
 			(modes & IWINFO_80211_G) ? "g" : "",
 			(modes & IWINFO_80211_N) ? "n" : "",
 			(modes & IWINFO_80211_AC) ? "ac" : "",
-			(modes & IWINFO_80211_AD) ? "ad" : "");
+			(modes & IWINFO_80211_AD) ? "ad" : "",
+			(modes & IWINFO_80211_AX) ? "ax" : "",
+			(modes & IWINFO_80211_BE) ? "be" : "");
 
 	return buf;
 }

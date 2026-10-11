@@ -1,5 +1,5 @@
 IWINFO_BACKENDS    = $(BACKENDS)
-IWINFO_CFLAGS      = $(CFLAGS) -std=gnu99 -fstrict-aliasing -Iinclude
+IWINFO_CFLAGS      = -Iinclude $(CFLAGS) -std=gnu99 -fstrict-aliasing
 IWINFO_LDFLAGS     = -luci -lubox -lubus
 
 IWINFO_LIB         = libiwinfo.so
@@ -30,6 +30,11 @@ ifneq ($(filter nl80211,$(IWINFO_BACKENDS)),)
 	IWINFO_CLI_LDFLAGS += -lnl-tiny
 	IWINFO_LIB_LDFLAGS += -lnl-tiny
 	IWINFO_LIB_OBJ     += iwinfo_nl80211.o
+endif
+
+ifneq ($(filter qcawificfg80211,$(IWINFO_BACKENDS)),)
+	IWINFO_CFLAGS  += -DUSE_QCA
+	IWINFO_LIB_OBJ += iwinfo_qcawificfg80211.o
 endif
 
 

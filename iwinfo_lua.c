@@ -521,6 +521,10 @@ static int iwinfo_L_hwmodelist(lua_State *L, int (*func)(const char *, int *))
 		lua_pushboolean(L, hwmodes & IWINFO_80211_N);
 		lua_setfield(L, -2, "n");
 
+		lua_pushboolean(L, hwmodes & IWINFO_80211_AX);
+		lua_setfield(L, -2, "ax");
+		lua_pushboolean(L, hwmodes & IWINFO_80211_BE);
+		lua_setfield(L, -2, "be");
 		lua_pushboolean(L, hwmodes & IWINFO_80211_AC);
 		lua_setfield(L, -2, "ac");
 
@@ -750,6 +754,36 @@ LUA_WRAP_STRUCT_OP(nl80211,mbssid_support)
 LUA_WRAP_STRUCT_OP(nl80211,hardware_id)
 #endif
 
+#ifdef USE_QCA
+/* NL80211 */
+LUA_WRAP_INT_OP(qcawificfg80211,channel)
+LUA_WRAP_INT_OP(qcawificfg80211,frequency)
+LUA_WRAP_INT_OP(qcawificfg80211,frequency_offset)
+LUA_WRAP_INT_OP(qcawificfg80211,txpower)
+LUA_WRAP_INT_OP(qcawificfg80211,txpower_offset)
+LUA_WRAP_INT_OP(qcawificfg80211,bitrate)
+LUA_WRAP_INT_OP(qcawificfg80211,signal)
+LUA_WRAP_INT_OP(qcawificfg80211,noise)
+LUA_WRAP_INT_OP(qcawificfg80211,quality)
+LUA_WRAP_INT_OP(qcawificfg80211,quality_max)
+LUA_WRAP_STRING_OP(qcawificfg80211,ssid)
+LUA_WRAP_STRING_OP(qcawificfg80211,bssid)
+LUA_WRAP_STRING_OP(qcawificfg80211,country)
+LUA_WRAP_STRING_OP(qcawificfg80211,hardware_name)
+LUA_WRAP_STRING_OP(qcawificfg80211,phyname)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,mode)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,assoclist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,txpwrlist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,scanlist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,freqlist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,countrylist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,hwmodelist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,htmodelist)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,encryption)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,mbssid_support)
+LUA_WRAP_STRUCT_OP(qcawificfg80211,hardware_id)
+#endif
+
 /* Wext */
 LUA_WRAP_INT_OP(wext,channel)
 LUA_WRAP_INT_OP(wext,frequency)
@@ -877,6 +911,39 @@ static const luaL_reg R_nl80211[] = {
 };
 #endif
 
+#ifdef USE_QCA
+/* NL80211 table */
+static const luaL_reg R_qcawificfg80211[] = {
+	LUA_REG(qcawificfg80211,channel),
+	LUA_REG(qcawificfg80211,frequency),
+	LUA_REG(qcawificfg80211,frequency_offset),
+	LUA_REG(qcawificfg80211,txpower),
+	LUA_REG(qcawificfg80211,txpower_offset),
+	LUA_REG(qcawificfg80211,bitrate),
+	LUA_REG(qcawificfg80211,signal),
+	LUA_REG(qcawificfg80211,noise),
+	LUA_REG(qcawificfg80211,quality),
+	LUA_REG(qcawificfg80211,quality_max),
+	LUA_REG(qcawificfg80211,mode),
+	LUA_REG(qcawificfg80211,ssid),
+	LUA_REG(qcawificfg80211,bssid),
+	LUA_REG(qcawificfg80211,country),
+	LUA_REG(qcawificfg80211,assoclist),
+	LUA_REG(qcawificfg80211,txpwrlist),
+	LUA_REG(qcawificfg80211,scanlist),
+	LUA_REG(qcawificfg80211,freqlist),
+	LUA_REG(qcawificfg80211,countrylist),
+	LUA_REG(qcawificfg80211,hwmodelist),
+	LUA_REG(qcawificfg80211,htmodelist),
+	LUA_REG(qcawificfg80211,encryption),
+	LUA_REG(qcawificfg80211,mbssid_support),
+	LUA_REG(qcawificfg80211,hardware_id),
+	LUA_REG(qcawificfg80211,hardware_name),
+	LUA_REG(qcawificfg80211,phyname),
+	{ NULL, NULL }
+};
+#endif
+
 /* Wext table */
 static const luaL_reg R_wext[] = {
 	LUA_REG(wext,channel),
@@ -944,6 +1011,15 @@ LUALIB_API int luaopen_iwinfo(lua_State *L) {
 	lua_pushvalue(L, -1);
 	lua_setfield(L, -2, "__index");
 	lua_setfield(L, -2, "nl80211");
+#endif
+
+#ifdef USE_QCA
+	luaL_newmetatable(L, "iwinfo.qcawificfg80211");
+	luaL_register(L, NULL, R_common);
+	luaL_register(L, NULL, R_qcawificfg80211);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, -2, "__index");
+	lua_setfield(L, -2, "qcawificfg80211");
 #endif
 
 	luaL_newmetatable(L, IWINFO_WEXT_META);
