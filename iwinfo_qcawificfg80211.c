@@ -122,7 +122,14 @@ static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *en
 		else {
 			width = strstr(mode, "_HE");
 			if (width) entry->rx_rate.is_he = entry->tx_rate.is_he = 1;
-			else width = strstr(mode, "_VHT");
+			else {
+				width = strstr(mode, "_VHT");
+				if (width) entry->rx_rate.is_vht = entry->tx_rate.is_vht = 1;
+				else {
+					width = strstr(mode, "_HT");
+					if (width) entry->rx_rate.is_ht = entry->tx_rate.is_ht = 1;
+				}
+			}
 		}
 		if (width && sscanf(width + (width[1] == 'H' ? 3 : 4), "%u", &mhz) == 1 &&
 		    (mhz == 20 || mhz == 40 || mhz == 80 || mhz == 160 || mhz == 320)) {
@@ -166,8 +173,18 @@ static int qca_assoclist(const char *name, char *buf, int *len)
 			/* QSDK implements individual GET_STATION requests, but not station dumps. */
 			if (!native.rx_rate.mhz) native.rx_rate.mhz = entry.rx_rate.mhz;
 			if (!native.tx_rate.mhz) native.tx_rate.mhz = entry.tx_rate.mhz;
-			native.rx_rate.is_he = native.tx_rate.is_he = entry.rx_rate.is_he;
-			native.rx_rate.is_eht = native.tx_rate.is_eht = entry.rx_rate.is_eht;
+			if (!native.rx_rate.is_ht && !native.rx_rate.is_vht) {
+				native.rx_rate.is_he = entry.rx_rate.is_he;
+				native.rx_rate.is_eht = entry.rx_rate.is_eht;
+				native.rx_rate.is_ht = entry.rx_rate.is_ht;
+				native.rx_rate.is_vht = entry.rx_rate.is_vht;
+			}
+			if (!native.tx_rate.is_ht && !native.tx_rate.is_vht) {
+				native.tx_rate.is_he = entry.tx_rate.is_he;
+				native.tx_rate.is_eht = entry.tx_rate.is_eht;
+				native.tx_rate.is_ht = entry.tx_rate.is_ht;
+				native.tx_rate.is_vht = entry.tx_rate.is_vht;
+			}
 			native.rx_rate.is_320mhz = native.tx_rate.is_320mhz = entry.rx_rate.is_320mhz;
 			if (!native.rx_rate.nss) native.rx_rate.nss = entry.rx_rate.nss;
 			if (!native.tx_rate.nss) native.tx_rate.nss = entry.tx_rate.nss;
