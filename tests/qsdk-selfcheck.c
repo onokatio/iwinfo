@@ -11,6 +11,7 @@ static int station_close(FILE *fp);
 #undef pclose
 static int nl_rate, nl_stations, nl_result, station_calls, station_failure, station_count = 2;
 static int individual_result = -1;
+static int power_failure;
 int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwinfo_assoclist_entry *entry)
 {
 	memset(entry, 0, sizeof(*entry));
@@ -23,6 +24,8 @@ int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwin
 }
 static int native_bitrate(const char *name, int *buf) { *buf = nl_rate; return 0; }
 static int vendor_bitrate(const char *name, int *buf) { *buf = 2882; return 0; }
+static int native_power(const char *name, int *buf) { *buf = 50; return 0; }
+static int vendor_power(const char *name, int *buf) { *buf = 10; return power_failure; }
 static int native_noise(const char *name, int *buf) { *buf = -96; return 0; }
 static int native_assoclist(const char *name, char *buf, int *len)
 {
@@ -32,9 +35,9 @@ static int native_assoclist(const char *name, char *buf, int *len)
 	return nl_result;
 }
 const struct iwinfo_ops nl80211_ops = {
-	.bitrate = native_bitrate, .noise = native_noise, .assoclist = native_assoclist
+	.bitrate = native_bitrate, .noise = native_noise, .assoclist = native_assoclist, .txpower = native_power
 };
-const struct iwinfo_ops wext_ops = { .bitrate = vendor_bitrate };
+const struct iwinfo_ops wext_ops = { .bitrate = vendor_bitrate, .txpower = vendor_power };
 
 static FILE *station_pipe(const char *command, const char *mode)
 {
@@ -78,6 +81,10 @@ int main(void)
 	assert(qca_parse_country("missing colon", buf));
 	assert(qca_parse_country("country:J", buf));
 	assert(qca_parse_country("country:JPextra", buf));
+	assert(!qca_txpower("ath-test", &hw) && hw == 10);
+	power_failure = -1;
+	assert(!qca_txpower("ath-test", &hw) && hw == 50);
+	power_failure = 0;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 2882000);
 	nl_rate = 1200000;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 1200000);

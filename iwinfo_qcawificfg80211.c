@@ -88,11 +88,19 @@ static int qca_##op(const char *name, char *buf, int *len) { \
 	return vif ? nl80211_ops.op(vif, buf, len) : -1; \
 }
 QCA_NUM(mode) QCA_NUM(channel) QCA_NUM(frequency) QCA_NUM(frequency_offset)
-QCA_NUM(txpower) QCA_NUM(txpower_offset) QCA_NUM(signal)
+QCA_NUM(txpower_offset) QCA_NUM(signal)
 QCA_NUM(noise) QCA_NUM(quality) QCA_NUM(quality_max) QCA_NUM(mbssid_support)
 QCA_STR(ssid) QCA_STR(bssid) QCA_STR(hardware_id)
 QCA_STR(hardware_name) QCA_STR(encryption) QCA_STR(phyname) QCA_STR(lookup_phy)
 QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+
+static int qca_txpower(const char *name, int *buf)
+{
+	const char *vif = qca_resolve(name);
+	if (!vif) return -1;
+	/* QSDK's WEXT value agrees with its configured dBm; nl80211 can report bogus values. */
+	return !wext_ops.txpower(vif, buf) ? 0 : nl80211_ops.txpower(vif, buf);
+}
 
 static int qca_parse_country(const char *line, char *buf)
 {
