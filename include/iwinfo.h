@@ -113,6 +113,9 @@ struct iwinfo_rate_entry {
 	uint8_t is_short_gi:1;
 	uint8_t is_ht:1;
 	uint8_t is_vht:1;
+	uint8_t is_he:1;
+	uint8_t is_eht:1;
+	uint8_t is_320mhz:1;
 	uint8_t mhz;
 	uint8_t nss;
 };
@@ -268,6 +271,8 @@ extern const struct iwinfo_ops wext_ops;
 extern const struct iwinfo_ops madwifi_ops;
 extern const struct iwinfo_ops nl80211_ops;
 extern const struct iwinfo_ops qcawificfg80211_ops;
+int iwinfo_nl80211_get_station(const char *ifname, const uint8_t *mac,
+                              struct iwinfo_assoclist_entry *entry);
 extern const struct iwinfo_ops wl_ops;
 
 #include "iwinfo/utils.h"
