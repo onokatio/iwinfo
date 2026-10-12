@@ -88,15 +88,53 @@ static int qca_##op(const char *name, char *buf, int *len) { \
 	return vif ? nl80211_ops.op(vif, buf, len) : -1; \
 }
 QCA_NUM(mode) QCA_NUM(channel) QCA_NUM(frequency) QCA_NUM(frequency_offset)
-QCA_NUM(txpower) QCA_NUM(txpower_offset) QCA_NUM(signal)
+QCA_NUM(txpower_offset) QCA_NUM(signal)
 QCA_NUM(noise) QCA_NUM(quality) QCA_NUM(quality_max) QCA_NUM(mbssid_support)
-QCA_STR(ssid) QCA_STR(bssid) QCA_STR(country) QCA_STR(hardware_id)
+QCA_STR(ssid) QCA_STR(bssid) QCA_STR(hardware_id)
 QCA_STR(hardware_name) QCA_STR(encryption) QCA_STR(phyname) QCA_STR(lookup_phy)
 QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+
+static int qca_txpower(const char *name, int *buf)
+{
+	const char *vif = qca_resolve(name);
+	if (!vif) return -1;
+	/* QSDK's WEXT value agrees with its configured dBm; nl80211 can report bogus values. */
+	return !wext_ops.txpower(vif, buf) ? 0 : nl80211_ops.txpower(vif, buf);
+}
+
+static int qca_parse_country(const char *line, char *buf)
+{
+	const char *value = strchr(line, ':');
+	if (!value || !isupper((unsigned char)value[1]) ||
+	    !isupper((unsigned char)value[2]) || (unsigned char)value[3] > ' ') return -1;
+	buf[0] = value[1]; buf[1] = value[2]; buf[2] = 0;
+	return 0;
+}
+
+static int qca_country(const char *name, char *buf)
+{
+	char radio[IFNAMSIZ], command[96], line[128];
+	const char *vif;
+	FILE *fp;
+	int result = -1;
+	if (qca_radio(name, radio)) return -1;
+	/* QSDK keeps a per-radio country while nl80211 reports the global world domain. */
+	snprintf(command, sizeof(command), "/usr/sbin/cfg80211tool %s getCountry 2>/dev/null", radio);
+	fp = popen(command, "r");
+	if (fp) {
+		if (fgets(line, sizeof(line), fp)) result = qca_parse_country(line, buf);
+		if (pclose(fp)) result = -1;
+	}
+	if (!result) return 0;
+	vif = qca_resolve(name);
+	return vif ? nl80211_ops.country(vif, buf) : -1;
+}
 
 static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *entry)
 {
 	char mac[18], tx[8], rx[8];
+	const char *mode, *width;
+	unsigned int mhz, rx_nss, tx_nss;
 	unsigned long tx_rate, rx_rate;
 	int signal, i;
 	if (sscanf(line, "%17s %*u %*u %7[0-9]M %7[0-9]M %4d", mac, tx, rx, &signal) != 4 ||
@@ -112,6 +150,35 @@ static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *en
 	entry->rx_rate.rate = rx_rate * 1000;
 	entry->tx_rate.rate = tx_rate * 1000;
 	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
+	mode = strstr(line, " IEEE80211_MODE_11");
+	if (mode) {
+		mode++;
+		width = strstr(mode, "_EHT");
+		if (width) entry->rx_rate.is_eht = entry->tx_rate.is_eht = 1;
+		else {
+			width = strstr(mode, "_HE");
+			if (width) entry->rx_rate.is_he = entry->tx_rate.is_he = 1;
+			else {
+				width = strstr(mode, "_VHT");
+				if (width) entry->rx_rate.is_vht = entry->tx_rate.is_vht = 1;
+				else {
+					width = strstr(mode, "_HT");
+					if (width) entry->rx_rate.is_ht = entry->tx_rate.is_ht = 1;
+				}
+			}
+		}
+		if (width && sscanf(width + (width[1] == 'H' ? 3 : 4), "%u", &mhz) == 1 &&
+		    (mhz == 20 || mhz == 40 || mhz == 80 || mhz == 160 || mhz == 320)) {
+			entry->rx_rate.mhz = entry->tx_rate.mhz = mhz == 320 ? 0 : mhz;
+			entry->rx_rate.is_320mhz = entry->tx_rate.is_320mhz = mhz == 320;
+		}
+		mode = strchr(mode, ' ');
+		if (mode && sscanf(mode, "%u %u", &rx_nss, &tx_nss) == 2 &&
+		    rx_nss >= 1 && rx_nss <= 8 && tx_nss >= 1 && tx_nss <= 8) {
+			entry->rx_rate.nss = rx_nss;
+			entry->tx_rate.nss = tx_nss;
+		}
+	}
 	return 0;
 }
 
@@ -119,7 +186,7 @@ static int qca_assoclist(const char *name, char *buf, int *len)
 {
 	const char *vif = qca_resolve(name);
 	char command[96], line[512];
-	struct iwinfo_assoclist_entry entry;
+	struct iwinfo_assoclist_entry entry, native;
 	FILE *fp;
 	int noise = 0, ch;
 	*len = 0;
@@ -138,6 +205,30 @@ static int qca_assoclist(const char *name, char *buf, int *len)
 			continue;
 		}
 		if (qca_parse_station(line, &entry) || *len + sizeof(entry) > IWINFO_BUFSIZE) continue;
+		if (!iwinfo_nl80211_get_station(vif, entry.mac, &native)) {
+			/* QSDK implements individual GET_STATION requests, but not station dumps. */
+			if (!native.rx_rate.mhz) native.rx_rate.mhz = entry.rx_rate.mhz;
+			if (!native.tx_rate.mhz) native.tx_rate.mhz = entry.tx_rate.mhz;
+			if (!native.rx_rate.is_ht && !native.rx_rate.is_vht) {
+				native.rx_rate.is_he = entry.rx_rate.is_he;
+				native.rx_rate.is_eht = entry.rx_rate.is_eht;
+				native.rx_rate.is_ht = entry.rx_rate.is_ht;
+				native.rx_rate.is_vht = entry.rx_rate.is_vht;
+			}
+			if (!native.tx_rate.is_ht && !native.tx_rate.is_vht) {
+				native.tx_rate.is_he = entry.tx_rate.is_he;
+				native.tx_rate.is_eht = entry.tx_rate.is_eht;
+				native.tx_rate.is_ht = entry.tx_rate.is_ht;
+				native.tx_rate.is_vht = entry.tx_rate.is_vht;
+			}
+			native.rx_rate.is_320mhz = native.tx_rate.is_320mhz = entry.rx_rate.is_320mhz;
+			if (!native.rx_rate.nss) native.rx_rate.nss = entry.rx_rate.nss;
+			if (!native.tx_rate.nss) native.tx_rate.nss = entry.tx_rate.nss;
+			/* QSDK's nl80211 rate can be nonsensical; use the native station rates. */
+			native.rx_rate.rate = entry.rx_rate.rate;
+			native.tx_rate.rate = entry.tx_rate.rate;
+			entry = native;
+		}
 		entry.noise = noise;
 		memcpy(buf + *len, &entry, sizeof(entry));
 		*len += sizeof(entry);

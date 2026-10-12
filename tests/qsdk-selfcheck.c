@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <assert.h>
 #include <stdio.h>
+#include <stddef.h>
 static FILE *station_pipe(const char *command, const char *mode);
 static int station_close(FILE *fp);
 #define popen station_pipe
@@ -9,8 +10,22 @@ static int station_close(FILE *fp);
 #undef popen
 #undef pclose
 static int nl_rate, nl_stations, nl_result, station_calls, station_failure, station_count = 2;
+static int individual_result = -1;
+static int power_failure;
+int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwinfo_assoclist_entry *entry)
+{
+	memset(entry, 0, sizeof(*entry));
+	memcpy(entry->mac, mac, 6);
+	entry->signal = -45;
+	entry->rx_rate.rate = 2135200;
+	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
+	entry->rx_packets = 11;
+	return individual_result;
+}
 static int native_bitrate(const char *name, int *buf) { *buf = nl_rate; return 0; }
 static int vendor_bitrate(const char *name, int *buf) { *buf = 2882; return 0; }
+static int native_power(const char *name, int *buf) { *buf = 50; return 0; }
+static int vendor_power(const char *name, int *buf) { *buf = 10; return power_failure; }
 static int native_noise(const char *name, int *buf) { *buf = -96; return 0; }
 static int native_assoclist(const char *name, char *buf, int *len)
 {
@@ -20,9 +35,9 @@ static int native_assoclist(const char *name, char *buf, int *len)
 	return nl_result;
 }
 const struct iwinfo_ops nl80211_ops = {
-	.bitrate = native_bitrate, .noise = native_noise, .assoclist = native_assoclist
+	.bitrate = native_bitrate, .noise = native_noise, .assoclist = native_assoclist, .txpower = native_power
 };
-const struct iwinfo_ops wext_ops = { .bitrate = vendor_bitrate };
+const struct iwinfo_ops wext_ops = { .bitrate = vendor_bitrate, .txpower = vendor_power };
 
 static FILE *station_pipe(const char *command, const char *mode)
 {
@@ -56,9 +71,20 @@ int main(void)
 	int hw, ht, len, calls, i;
 	char buf[IWINFO_BUFSIZE + 16];
 	struct iwinfo_assoclist_entry entry;
+	assert(sizeof(struct iwinfo_rate_entry) == 8);
+	assert(offsetof(struct iwinfo_rate_entry, mhz) == 6 && offsetof(struct iwinfo_rate_entry, nss) == 7);
 	assert(qca_name("wifi2") && qca_name("ath26"));
 	assert(!qca_name("../etc/passwd") && !qca_name("ath2;id") && !qca_name(""));
 	assert(!qca_name("abcdefghijklmnop"));
+	assert(!qca_parse_country("wifi0\tgetCountry:JP\004\n", buf) && !strcmp(buf, "JP"));
+	assert(!qca_parse_country("wifi2\tgetCountry:US\n", buf) && !strcmp(buf, "US"));
+	assert(qca_parse_country("missing colon", buf));
+	assert(qca_parse_country("country:J", buf));
+	assert(qca_parse_country("country:JPextra", buf));
+	assert(!qca_txpower("ath-test", &hw) && hw == 10);
+	power_failure = -1;
+	assert(!qca_txpower("ath-test", &hw) && hw == 50);
+	power_failure = 0;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 2882000);
 	nl_rate = 1200000;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 1200000);
@@ -73,6 +99,12 @@ int main(void)
 	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48", &entry));
 	assert(entry.mac[5] == 1 && entry.signal == -48 && entry.tx_rate.rate == 2882000);
 	assert(entry.rx_rate.rate == 1441000 && entry.rx_rate.mcs == -1);
+	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48 padding IEEE80211_MODE_11AXA_HE80 2 2 0", &entry));
+	assert(entry.rx_rate.is_he && entry.rx_rate.mhz == 80 && entry.rx_rate.nss == 2 && entry.rx_rate.mcs == -1);
+	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48 IEEE80211_MODE_11BEA_EHT320 2 2 0", &entry));
+	assert(entry.rx_rate.is_eht && entry.rx_rate.is_320mhz && entry.rx_rate.mhz == 0);
+	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48 IEEE80211_MODE_11AXA_HE9999 99 99 0", &entry));
+	assert(!entry.rx_rate.mhz && !entry.rx_rate.nss);
 	assert(qca_parse_station("02:00:00:00:00:zz 1 36 1M 2M -50", &entry));
 	assert(qca_parse_station("02:00:00:00:00:01 1 36 -1M 2M -50", &entry));
 	assert(qca_parse_station("02:00:00:00:00:01 1 36 4294967296M 2M -50", &entry));
@@ -82,6 +114,11 @@ int main(void)
 	assert(!qca_assoclist("ath-test", buf, &len) && len == 2 * sizeof(entry));
 	memcpy(&entry, buf, sizeof(entry));
 	assert(entry.signal == -48 && entry.noise == -96 && entry.rx_rate.rate == 1441000);
+	individual_result = 0;
+	assert(!qca_assoclist("ath-test", buf, &len));
+	memcpy(&entry, buf, sizeof(entry));
+	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 1441000);
+	individual_result = -1;
 	nl_stations = 1;
 	calls = station_calls;
 	assert(!qca_assoclist("ath-test", buf, &len) && len == sizeof(entry));

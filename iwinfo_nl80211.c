@@ -2152,6 +2152,27 @@ static int nl80211_get_assoclist(const char *ifname, char *buf, int *len)
 	return -1;
 }
 
+static int nl80211_get_station_cb(struct nl_msg *msg, void *arg)
+{
+	struct nl80211_array_buf *arr = arg;
+	return arr->count ? NL_SKIP : nl80211_get_assoclist_cb(msg, arg);
+}
+
+int iwinfo_nl80211_get_station(const char *ifname, const uint8_t *mac,
+                              struct iwinfo_assoclist_entry *entry)
+{
+	struct nl80211_array_buf arr = { .buf = entry, .count = 0 };
+	struct nl80211_msg_conveyor *req = nl80211_msg(ifname, NL80211_CMD_GET_STATION, 0);
+	if (!req) return -1;
+	nla_put(req->msg, NL80211_ATTR_MAC, 6, mac);
+	if (nl80211_send(req, nl80211_get_station_cb, &arr) || arr.count != 1 ||
+	    memcmp(entry->mac, mac, 6)) return -1;
+	/* A bitrate without width/MCS attributes does not imply a 20 MHz link. */
+	if (!entry->rx_rate.is_ht && !entry->rx_rate.is_vht) { entry->rx_rate.mhz = 0; entry->rx_rate.mcs = -1; }
+	if (!entry->tx_rate.is_ht && !entry->tx_rate.is_vht) { entry->tx_rate.mhz = 0; entry->tx_rate.mcs = -1; }
+	return 0;
+}
+
 static int nl80211_get_txpwrlist_cb(struct nl_msg *msg, void *arg)
 {
 	int *dbm_max = arg;
