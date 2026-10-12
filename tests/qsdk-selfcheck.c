@@ -73,6 +73,11 @@ int main(void)
 	assert(qca_name("wifi2") && qca_name("ath26"));
 	assert(!qca_name("../etc/passwd") && !qca_name("ath2;id") && !qca_name(""));
 	assert(!qca_name("abcdefghijklmnop"));
+	assert(!qca_parse_country("wifi0\tgetCountry:JP\004\n", buf) && !strcmp(buf, "JP"));
+	assert(!qca_parse_country("wifi2\tgetCountry:US\n", buf) && !strcmp(buf, "US"));
+	assert(qca_parse_country("missing colon", buf));
+	assert(qca_parse_country("country:J", buf));
+	assert(qca_parse_country("country:JPextra", buf));
 	assert(!qca_bitrate("ath-test", &hw) && hw == 2882000);
 	nl_rate = 1200000;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 1200000);
@@ -105,7 +110,7 @@ int main(void)
 	individual_result = 0;
 	assert(!qca_assoclist("ath-test", buf, &len));
 	memcpy(&entry, buf, sizeof(entry));
-	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 2135200);
+	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 1441000);
 	individual_result = -1;
 	nl_stations = 1;
 	calls = station_calls;

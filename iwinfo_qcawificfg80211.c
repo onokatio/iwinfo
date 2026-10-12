@@ -90,9 +90,37 @@ static int qca_##op(const char *name, char *buf, int *len) { \
 QCA_NUM(mode) QCA_NUM(channel) QCA_NUM(frequency) QCA_NUM(frequency_offset)
 QCA_NUM(txpower) QCA_NUM(txpower_offset) QCA_NUM(signal)
 QCA_NUM(noise) QCA_NUM(quality) QCA_NUM(quality_max) QCA_NUM(mbssid_support)
-QCA_STR(ssid) QCA_STR(bssid) QCA_STR(country) QCA_STR(hardware_id)
+QCA_STR(ssid) QCA_STR(bssid) QCA_STR(hardware_id)
 QCA_STR(hardware_name) QCA_STR(encryption) QCA_STR(phyname) QCA_STR(lookup_phy)
 QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+
+static int qca_parse_country(const char *line, char *buf)
+{
+	const char *value = strchr(line, ':');
+	if (!value || !isupper((unsigned char)value[1]) ||
+	    !isupper((unsigned char)value[2]) || (unsigned char)value[3] > ' ') return -1;
+	buf[0] = value[1]; buf[1] = value[2]; buf[2] = 0;
+	return 0;
+}
+
+static int qca_country(const char *name, char *buf)
+{
+	char radio[IFNAMSIZ], command[96], line[128];
+	const char *vif;
+	FILE *fp;
+	int result = -1;
+	if (qca_radio(name, radio)) return -1;
+	/* QSDK keeps a per-radio country while nl80211 reports the global world domain. */
+	snprintf(command, sizeof(command), "/usr/sbin/cfg80211tool %s getCountry 2>/dev/null", radio);
+	fp = popen(command, "r");
+	if (fp) {
+		if (fgets(line, sizeof(line), fp)) result = qca_parse_country(line, buf);
+		if (pclose(fp)) result = -1;
+	}
+	if (!result) return 0;
+	vif = qca_resolve(name);
+	return vif ? nl80211_ops.country(vif, buf) : -1;
+}
 
 static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *entry)
 {
@@ -188,8 +216,9 @@ static int qca_assoclist(const char *name, char *buf, int *len)
 			native.rx_rate.is_320mhz = native.tx_rate.is_320mhz = entry.rx_rate.is_320mhz;
 			if (!native.rx_rate.nss) native.rx_rate.nss = entry.rx_rate.nss;
 			if (!native.tx_rate.nss) native.tx_rate.nss = entry.tx_rate.nss;
-			if (!native.rx_rate.rate) native.rx_rate.rate = entry.rx_rate.rate;
-			if (!native.tx_rate.rate) native.tx_rate.rate = entry.tx_rate.rate;
+			/* QSDK's nl80211 rate can be nonsensical; use the native station rates. */
+			native.rx_rate.rate = entry.rx_rate.rate;
+			native.tx_rate.rate = entry.tx_rate.rate;
 			entry = native;
 		}
 		entry.noise = noise;
