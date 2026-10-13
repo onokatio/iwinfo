@@ -9,6 +9,13 @@ static int station_close(FILE *fp);
 #include "../iwinfo_qcawificfg80211.c"
 #undef popen
 #undef pclose
+/* Test the real nl80211 rate decoder without linking a second netlink library. */
+#include "../api/nl80211.h"
+struct nlattr { uint32_t value; };
+static uint8_t nla_get_u8(struct nlattr *a) { return a->value; }
+static uint16_t nla_get_u16(struct nlattr *a) { return a->value; }
+static uint32_t nla_get_u32(struct nlattr *a) { return a->value; }
+#include "qsdk-nl-rate.inc"
 static int nl_rate, nl_stations, nl_result, station_calls, station_failure, station_count = 2;
 static int individual_result = -1;
 static int power_failure;
@@ -20,6 +27,7 @@ int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwin
 	entry->rx_rate.rate = 2135200;
 	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
 	entry->rx_packets = 11;
+	entry->stats_mask = IWINFO_ASSOC_S_RX_PACKETS;
 	return individual_result;
 }
 static int native_bitrate(const char *name, int *buf) { *buf = nl_rate; return 0; }
@@ -71,8 +79,30 @@ int main(void)
 	int hw, ht, len, calls, i;
 	char buf[IWINFO_BUFSIZE + 16];
 	struct iwinfo_assoclist_entry entry;
+	struct nlattr *rates[NL80211_RATE_INFO_MAX + 1] = {0};
+	struct nlattr mcs = { .value = 11 }, nss = { .value = 2 }, flag = {0};
+	struct iwinfo_rate_entry parsed = {0};
+	rates[NL80211_RATE_INFO_HE_MCS] = &mcs;
+	rates[NL80211_RATE_INFO_HE_NSS] = &nss;
+	rates[NL80211_RATE_INFO_80_MHZ_WIDTH] = &flag;
+	nl80211_parse_rateinfo(rates, &parsed);
+	assert(parsed.is_he && !parsed.is_eht && parsed.mcs == 11 && parsed.nss == 2 && parsed.mhz == 80);
+	memset(rates, 0, sizeof(rates)); memset(&parsed, 0, sizeof(parsed));
+	rates[NL80211_RATE_INFO_EHT_MCS] = &mcs;
+	rates[NL80211_RATE_INFO_EHT_NSS] = &nss;
+	rates[NL80211_RATE_INFO_320_MHZ_WIDTH] = &flag;
+	mcs.value = 15;
+	nl80211_parse_rateinfo(rates, &parsed);
+	assert(parsed.is_eht && !parsed.is_he && parsed.is_320mhz && parsed.mcs == 15 && parsed.nss == 2);
+	mcs.value = 255; nss.value = 9; memset(&parsed, 0, sizeof(parsed));
+	nl80211_parse_rateinfo(rates, &parsed);
+	assert(parsed.mcs == -1 && !parsed.nss);
+	assert(sizeof(struct iwinfo_assoclist_entry) == 160 && offsetof(struct iwinfo_assoclist_entry, thr) == 84);
+	assert(offsetof(struct iwinfo_assoclist_entry, flags_mask) == 81 && offsetof(struct iwinfo_assoclist_entry, stats_mask) == 82);
 	assert(sizeof(struct iwinfo_rate_entry) == 8);
 	assert(offsetof(struct iwinfo_rate_entry, mhz) == 6 && offsetof(struct iwinfo_rate_entry, nss) == 7);
+	assert(!strcmp(iwinfo_qcawificfg80211_ifname("ath-test"), "ath-test"));
+	assert(!iwinfo_qcawificfg80211_ifname("../etc/passwd"));
 	assert(qca_name("wifi2") && qca_name("ath26"));
 	assert(!qca_name("../etc/passwd") && !qca_name("ath2;id") && !qca_name(""));
 	assert(!qca_name("abcdefghijklmnop"));
@@ -118,6 +148,7 @@ int main(void)
 	assert(!qca_assoclist("ath-test", buf, &len));
 	memcpy(&entry, buf, sizeof(entry));
 	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 1441000);
+	assert(entry.stats_mask == IWINFO_ASSOC_S_RX_PACKETS && !entry.flags_mask);
 	individual_result = -1;
 	nl_stations = 1;
 	calls = station_calls;

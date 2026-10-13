@@ -1806,7 +1806,18 @@ static void nl80211_parse_rateinfo(struct nlattr **ri,
 	else if (ri[NL80211_RATE_INFO_BITRATE])
 		re->rate = nla_get_u16(ri[NL80211_RATE_INFO_BITRATE]) * 100;
 
-	if (ri[NL80211_RATE_INFO_VHT_MCS])
+	re->mcs = -1;
+	if (ri[NL80211_RATE_INFO_EHT_MCS] || ri[NL80211_RATE_INFO_HE_MCS])
+	{
+		int mcs = ri[NL80211_RATE_INFO_EHT_MCS] ? NL80211_RATE_INFO_EHT_MCS : NL80211_RATE_INFO_HE_MCS;
+		int nss = ri[NL80211_RATE_INFO_EHT_MCS] ? NL80211_RATE_INFO_EHT_NSS : NL80211_RATE_INFO_HE_NSS;
+		uint8_t value = nla_get_u8(ri[mcs]);
+		re->is_eht = mcs == NL80211_RATE_INFO_EHT_MCS;
+		re->is_he = !re->is_eht;
+		if (value <= (re->is_eht ? 15 : 11)) re->mcs = value;
+		if (ri[nss] && (value = nla_get_u8(ri[nss])) >= 1 && value <= 8) re->nss = value;
+	}
+	else if (ri[NL80211_RATE_INFO_VHT_MCS])
 	{
 		re->is_vht = 1;
 		re->mcs = nla_get_u8(ri[NL80211_RATE_INFO_VHT_MCS]);
@@ -1820,7 +1831,9 @@ static void nl80211_parse_rateinfo(struct nlattr **ri,
 		re->mcs = nla_get_u8(ri[NL80211_RATE_INFO_MCS]);
 	}
 
-	if (ri[NL80211_RATE_INFO_5_MHZ_WIDTH])
+	if (ri[NL80211_RATE_INFO_320_MHZ_WIDTH])
+		re->is_320mhz = 1;
+	else if (ri[NL80211_RATE_INFO_5_MHZ_WIDTH])
 		re->mhz = 5;
 	else if (ri[NL80211_RATE_INFO_10_MHZ_WIDTH])
 		re->mhz = 10;
@@ -1985,11 +1998,19 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		[NL80211_RATE_INFO_MCS]          = { .type = NLA_U8     },
 		[NL80211_RATE_INFO_40_MHZ_WIDTH] = { .type = NLA_FLAG   },
 		[NL80211_RATE_INFO_SHORT_GI]     = { .type = NLA_FLAG   },
+		[NL80211_RATE_INFO_BITRATE32] = { .type = NLA_U32 },
+		[NL80211_RATE_INFO_VHT_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_VHT_NSS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_HE_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_HE_NSS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_EHT_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_EHT_NSS] = { .type = NLA_U8 },
 	};
 
 	/* advance to end of array */
 	e += arr->count;
 	memset(e, 0, sizeof(*e));
+	e->rx_rate.mcs = e->tx_rate.mcs = -1;
 
 	if (attr[NL80211_ATTR_MAC])
 		memcpy(e->mac, nla_data(attr[NL80211_ATTR_MAC]), 6);
@@ -2001,20 +2022,30 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		if (sinfo[NL80211_STA_INFO_SIGNAL])
 			e->signal = nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL]);
 
-		if (sinfo[NL80211_STA_INFO_SIGNAL_AVG])
+		if (sinfo[NL80211_STA_INFO_SIGNAL_AVG]) {
+			e->stats_mask |= IWINFO_ASSOC_S_SIGNAL_AVG;
 			e->signal_avg = nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL_AVG]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_INACTIVE_TIME])
+		if (sinfo[NL80211_STA_INFO_INACTIVE_TIME]) {
+			e->stats_mask |= IWINFO_ASSOC_S_INACTIVE;
 			e->inactive = nla_get_u32(sinfo[NL80211_STA_INFO_INACTIVE_TIME]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_CONNECTED_TIME])
+		if (sinfo[NL80211_STA_INFO_CONNECTED_TIME]) {
+			e->stats_mask |= IWINFO_ASSOC_S_CONNECTED_TIME;
 			e->connected_time = nla_get_u32(sinfo[NL80211_STA_INFO_CONNECTED_TIME]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_RX_PACKETS])
+		if (sinfo[NL80211_STA_INFO_RX_PACKETS]) {
+			e->stats_mask |= IWINFO_ASSOC_S_RX_PACKETS;
 			e->rx_packets = nla_get_u32(sinfo[NL80211_STA_INFO_RX_PACKETS]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_TX_PACKETS])
+		if (sinfo[NL80211_STA_INFO_TX_PACKETS]) {
+			e->stats_mask |= IWINFO_ASSOC_S_TX_PACKETS;
 			e->tx_packets = nla_get_u32(sinfo[NL80211_STA_INFO_TX_PACKETS]);
+		}
 
 		if (sinfo[NL80211_STA_INFO_RX_BITRATE] &&
 		    !nla_parse_nested(rinfo, NL80211_RATE_INFO_MAX,
@@ -2026,26 +2057,38 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		                      sinfo[NL80211_STA_INFO_TX_BITRATE], rate_policy))
 			nl80211_parse_rateinfo(rinfo, &e->tx_rate);
 
-		if (sinfo[NL80211_STA_INFO_RX_BYTES])
+		if (sinfo[NL80211_STA_INFO_RX_BYTES]) {
+			e->stats_mask |= IWINFO_ASSOC_S_RX_BYTES;
 			e->rx_bytes = nla_get_u32(sinfo[NL80211_STA_INFO_RX_BYTES]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_TX_BYTES])
+		if (sinfo[NL80211_STA_INFO_TX_BYTES]) {
+			e->stats_mask |= IWINFO_ASSOC_S_TX_BYTES;
 			e->tx_bytes = nla_get_u32(sinfo[NL80211_STA_INFO_TX_BYTES]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_TX_RETRIES])
+		if (sinfo[NL80211_STA_INFO_TX_RETRIES]) {
+			e->stats_mask |= IWINFO_ASSOC_S_TX_RETRIES;
 			e->tx_retries = nla_get_u32(sinfo[NL80211_STA_INFO_TX_RETRIES]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_TX_FAILED])
+		if (sinfo[NL80211_STA_INFO_TX_FAILED]) {
+			e->stats_mask |= IWINFO_ASSOC_S_TX_FAILED;
 			e->tx_failed = nla_get_u32(sinfo[NL80211_STA_INFO_TX_FAILED]);
+		}
 
 		if (sinfo[NL80211_STA_INFO_T_OFFSET])
 			e->t_offset = nla_get_u64(sinfo[NL80211_STA_INFO_T_OFFSET]);
 
-		if (sinfo[NL80211_STA_INFO_RX_DROP_MISC])
+		if (sinfo[NL80211_STA_INFO_RX_DROP_MISC]) {
+			e->stats_mask |= IWINFO_ASSOC_S_RX_DROP_MISC;
 			e->rx_drop_misc = nla_get_u64(sinfo[NL80211_STA_INFO_RX_DROP_MISC]);
+		}
 
-		if (sinfo[NL80211_STA_INFO_EXPECTED_THROUGHPUT])
+		if (sinfo[NL80211_STA_INFO_EXPECTED_THROUGHPUT]) {
+			e->stats_mask |= IWINFO_ASSOC_S_THR;
 			e->thr = nla_get_u32(sinfo[NL80211_STA_INFO_EXPECTED_THROUGHPUT]);
+		}
 
 		/* mesh */
 		if (sinfo[NL80211_STA_INFO_LLID])
@@ -2071,29 +2114,35 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 			sta_flags = (struct nl80211_sta_flag_update *)
 				nla_data(sinfo[NL80211_STA_INFO_STA_FLAGS]);
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHORIZED) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_AUTHORIZED))
-				e->is_authorized = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHORIZED)) {
+				e->flags_mask |= IWINFO_ASSOC_F_AUTHORIZED;
+				e->is_authorized = !!(sta_flags->set & BIT(NL80211_STA_FLAG_AUTHORIZED));
+			}
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHENTICATED) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_AUTHENTICATED))
-				e->is_authenticated = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHENTICATED)) {
+				e->flags_mask |= IWINFO_ASSOC_F_AUTHENTICATED;
+				e->is_authenticated = !!(sta_flags->set & BIT(NL80211_STA_FLAG_AUTHENTICATED));
+			}
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_SHORT_PREAMBLE) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_SHORT_PREAMBLE))
-				e->is_preamble_short = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_SHORT_PREAMBLE)) {
+				e->flags_mask |= IWINFO_ASSOC_F_PREAMBLE;
+				e->is_preamble_short = !!(sta_flags->set & BIT(NL80211_STA_FLAG_SHORT_PREAMBLE));
+			}
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_WME) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_WME))
-				e->is_wme = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_WME)) {
+				e->flags_mask |= IWINFO_ASSOC_F_WME;
+				e->is_wme = !!(sta_flags->set & BIT(NL80211_STA_FLAG_WME));
+			}
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_MFP) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_MFP))
-				e->is_mfp = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_MFP)) {
+				e->flags_mask |= IWINFO_ASSOC_F_MFP;
+				e->is_mfp = !!(sta_flags->set & BIT(NL80211_STA_FLAG_MFP));
+			}
 
-			if (sta_flags->mask & BIT(NL80211_STA_FLAG_TDLS_PEER) &&
-			    sta_flags->set & BIT(NL80211_STA_FLAG_TDLS_PEER))
-				e->is_tdls = 1;
+			if (sta_flags->mask & BIT(NL80211_STA_FLAG_TDLS_PEER)) {
+				e->flags_mask |= IWINFO_ASSOC_F_TDLS;
+				e->is_tdls = !!(sta_flags->set & BIT(NL80211_STA_FLAG_TDLS_PEER));
+			}
 		}
 	}
 

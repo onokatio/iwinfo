@@ -35,7 +35,7 @@ static int qca_radio(const char *name, char *radio)
 	return -1;
 }
 
-static const char *qca_resolve(const char *name)
+const char *iwinfo_qcawificfg80211_ifname(const char *name)
 {
 	static char resolved[IFNAMSIZ];
 	char parent[IFNAMSIZ], flags[32], path[128], link[128];
@@ -73,18 +73,18 @@ static int qca_probe(const char *name) { char radio[IFNAMSIZ]; return !qca_radio
 
 #define QCA_NUM(op) \
 static int qca_##op(const char *name, int *buf) { \
-	const char *vif = qca_resolve(name); \
+	const char *vif = iwinfo_qcawificfg80211_ifname(name); \
 	if (!vif) return -1; \
 	return !nl80211_ops.op(vif, buf) ? 0 : wext_ops.op(vif, buf); \
 }
 #define QCA_STR(op) \
 static int qca_##op(const char *name, char *buf) { \
-	const char *vif = qca_resolve(name); \
+	const char *vif = iwinfo_qcawificfg80211_ifname(name); \
 	return vif ? nl80211_ops.op(vif, buf) : -1; \
 }
 #define QCA_LIST(op) \
 static int qca_##op(const char *name, char *buf, int *len) { \
-	const char *vif = qca_resolve(name); \
+	const char *vif = iwinfo_qcawificfg80211_ifname(name); \
 	return vif ? nl80211_ops.op(vif, buf, len) : -1; \
 }
 QCA_NUM(mode) QCA_NUM(channel) QCA_NUM(frequency) QCA_NUM(frequency_offset)
@@ -96,7 +96,7 @@ QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
 
 static int qca_txpower(const char *name, int *buf)
 {
-	const char *vif = qca_resolve(name);
+	const char *vif = iwinfo_qcawificfg80211_ifname(name);
 	if (!vif) return -1;
 	/* QSDK's WEXT value agrees with its configured dBm; nl80211 can report bogus values. */
 	return !wext_ops.txpower(vif, buf) ? 0 : nl80211_ops.txpower(vif, buf);
@@ -126,7 +126,7 @@ static int qca_country(const char *name, char *buf)
 		if (pclose(fp)) result = -1;
 	}
 	if (!result) return 0;
-	vif = qca_resolve(name);
+	vif = iwinfo_qcawificfg80211_ifname(name);
 	return vif ? nl80211_ops.country(vif, buf) : -1;
 }
 
@@ -184,7 +184,7 @@ static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *en
 
 static int qca_assoclist(const char *name, char *buf, int *len)
 {
-	const char *vif = qca_resolve(name);
+	const char *vif = iwinfo_qcawificfg80211_ifname(name);
 	char command[96], line[512];
 	struct iwinfo_assoclist_entry entry, native;
 	FILE *fp;
@@ -240,7 +240,7 @@ static int qca_assoclist(const char *name, char *buf, int *len)
 
 static int qca_bitrate(const char *name, int *buf)
 {
-	const char *vif = qca_resolve(name);
+	const char *vif = iwinfo_qcawificfg80211_ifname(name);
 	if (!vif) return -1;
 	if (!nl80211_ops.bitrate(vif, buf) && *buf > 0) return 0;
 	if (wext_ops.bitrate(vif, buf) || *buf < 0 || *buf > INT_MAX / 1000) return -1;
@@ -251,7 +251,7 @@ static int qca_bitrate(const char *name, int *buf)
 
 static int qca_scanlist(const char *name, char *buf, int *len)
 {
-	const char *vif = qca_resolve(name);
+	const char *vif = iwinfo_qcawificfg80211_ifname(name);
 	/* The native WEXT scan preserves the QSDK VAP/MLD lifecycle. */
 	return vif && strncmp(vif, "phy", 3) ? wext_ops.scanlist(vif, buf, len) : -1;
 }
