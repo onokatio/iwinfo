@@ -27,7 +27,7 @@ int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwin
 	entry->rx_rate.rate = 2135200;
 	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
 	entry->rx_packets = 11;
-	entry->has_stats = 1;
+	entry->stats_mask = IWINFO_ASSOC_S_RX_PACKETS;
 	return individual_result;
 }
 static int native_bitrate(const char *name, int *buf) { *buf = nl_rate; return 0; }
@@ -98,6 +98,7 @@ int main(void)
 	nl80211_parse_rateinfo(rates, &parsed);
 	assert(parsed.mcs == -1 && !parsed.nss);
 	assert(sizeof(struct iwinfo_assoclist_entry) == 160 && offsetof(struct iwinfo_assoclist_entry, thr) == 84);
+	assert(offsetof(struct iwinfo_assoclist_entry, flags_mask) == 81 && offsetof(struct iwinfo_assoclist_entry, stats_mask) == 82);
 	assert(sizeof(struct iwinfo_rate_entry) == 8);
 	assert(offsetof(struct iwinfo_rate_entry, mhz) == 6 && offsetof(struct iwinfo_rate_entry, nss) == 7);
 	assert(!strcmp(iwinfo_qcawificfg80211_ifname("ath-test"), "ath-test"));
@@ -147,6 +148,7 @@ int main(void)
 	assert(!qca_assoclist("ath-test", buf, &len));
 	memcpy(&entry, buf, sizeof(entry));
 	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 1441000);
+	assert(entry.stats_mask == IWINFO_ASSOC_S_RX_PACKETS && !entry.flags_mask);
 	individual_result = -1;
 	nl_stations = 1;
 	calls = station_calls;
