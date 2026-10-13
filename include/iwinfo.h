@@ -143,6 +143,8 @@ struct iwinfo_assoclist_entry {
 	uint8_t is_wme:1;
 	uint8_t is_mfp:1;
 	uint8_t is_tdls:1;
+	uint8_t has_stats:1;
+	uint8_t has_flags:1;
 	uint32_t thr;
 	uint16_t llid;
 	uint16_t plid;
@@ -271,6 +273,7 @@ extern const struct iwinfo_ops wext_ops;
 extern const struct iwinfo_ops madwifi_ops;
 extern const struct iwinfo_ops nl80211_ops;
 extern const struct iwinfo_ops qcawificfg80211_ops;
+const char *iwinfo_qcawificfg80211_ifname(const char *name);
 int iwinfo_nl80211_get_station(const char *ifname, const uint8_t *mac,
                               struct iwinfo_assoclist_entry *entry);
 extern const struct iwinfo_ops wl_ops;

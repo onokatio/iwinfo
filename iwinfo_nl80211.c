@@ -1806,7 +1806,18 @@ static void nl80211_parse_rateinfo(struct nlattr **ri,
 	else if (ri[NL80211_RATE_INFO_BITRATE])
 		re->rate = nla_get_u16(ri[NL80211_RATE_INFO_BITRATE]) * 100;
 
-	if (ri[NL80211_RATE_INFO_VHT_MCS])
+	re->mcs = -1;
+	if (ri[NL80211_RATE_INFO_EHT_MCS] || ri[NL80211_RATE_INFO_HE_MCS])
+	{
+		int mcs = ri[NL80211_RATE_INFO_EHT_MCS] ? NL80211_RATE_INFO_EHT_MCS : NL80211_RATE_INFO_HE_MCS;
+		int nss = ri[NL80211_RATE_INFO_EHT_MCS] ? NL80211_RATE_INFO_EHT_NSS : NL80211_RATE_INFO_HE_NSS;
+		uint8_t value = nla_get_u8(ri[mcs]);
+		re->is_eht = mcs == NL80211_RATE_INFO_EHT_MCS;
+		re->is_he = !re->is_eht;
+		if (value <= (re->is_eht ? 15 : 11)) re->mcs = value;
+		if (ri[nss] && (value = nla_get_u8(ri[nss])) >= 1 && value <= 8) re->nss = value;
+	}
+	else if (ri[NL80211_RATE_INFO_VHT_MCS])
 	{
 		re->is_vht = 1;
 		re->mcs = nla_get_u8(ri[NL80211_RATE_INFO_VHT_MCS]);
@@ -1820,7 +1831,9 @@ static void nl80211_parse_rateinfo(struct nlattr **ri,
 		re->mcs = nla_get_u8(ri[NL80211_RATE_INFO_MCS]);
 	}
 
-	if (ri[NL80211_RATE_INFO_5_MHZ_WIDTH])
+	if (ri[NL80211_RATE_INFO_320_MHZ_WIDTH])
+		re->is_320mhz = 1;
+	else if (ri[NL80211_RATE_INFO_5_MHZ_WIDTH])
 		re->mhz = 5;
 	else if (ri[NL80211_RATE_INFO_10_MHZ_WIDTH])
 		re->mhz = 10;
@@ -1985,11 +1998,19 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		[NL80211_RATE_INFO_MCS]          = { .type = NLA_U8     },
 		[NL80211_RATE_INFO_40_MHZ_WIDTH] = { .type = NLA_FLAG   },
 		[NL80211_RATE_INFO_SHORT_GI]     = { .type = NLA_FLAG   },
+		[NL80211_RATE_INFO_BITRATE32] = { .type = NLA_U32 },
+		[NL80211_RATE_INFO_VHT_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_VHT_NSS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_HE_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_HE_NSS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_EHT_MCS] = { .type = NLA_U8 },
+		[NL80211_RATE_INFO_EHT_NSS] = { .type = NLA_U8 },
 	};
 
 	/* advance to end of array */
 	e += arr->count;
 	memset(e, 0, sizeof(*e));
+	e->rx_rate.mcs = e->tx_rate.mcs = -1;
 
 	if (attr[NL80211_ATTR_MAC])
 		memcpy(e->mac, nla_data(attr[NL80211_ATTR_MAC]), 6);
@@ -1998,6 +2019,7 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 	    !nla_parse_nested(sinfo, NL80211_STA_INFO_MAX,
 	                      attr[NL80211_ATTR_STA_INFO], stats_policy))
 	{
+		e->has_stats = 1;
 		if (sinfo[NL80211_STA_INFO_SIGNAL])
 			e->signal = nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL]);
 
@@ -2068,6 +2090,7 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		/* Station flags */
 		if (sinfo[NL80211_STA_INFO_STA_FLAGS])
 		{
+			e->has_flags = 1;
 			sta_flags = (struct nl80211_sta_flag_update *)
 				nla_data(sinfo[NL80211_STA_INFO_STA_FLAGS]);
 
