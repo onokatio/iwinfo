@@ -22,6 +22,10 @@
 /*
  * name constants
  */
+const char * const IWINFO_80211_NAMES[IWINFO_80211_COUNT] = {
+	"a", "b", "g", "n", "ac", "ad", "ax", "be",
+};
+
 const char *IWINFO_CIPHER_NAMES[] = {
 	"NONE",
 	"WEP40",
@@ -69,6 +73,7 @@ const char *IWINFO_HTMODE_NAMES[] = {
 	"VHT160",
 	"HE20", "HE40", "HE80", "HE160",
 	"EHT20", "EHT40", "EHT80", "EHT160", "EHT320",
+	"NOHT",
 };
 
 

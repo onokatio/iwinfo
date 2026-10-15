@@ -31,6 +31,10 @@
 #define IWINFO_80211_AD      (1 << 5)
 #define IWINFO_80211_AX      (1 << 6)
 #define IWINFO_80211_BE      (1 << 7)
+#define IWINFO_80211_COUNT   8
+
+extern const char * const IWINFO_80211_NAMES[IWINFO_80211_COUNT];
+size_t iwinfo_format_hwmodes(int modes, char *buf, size_t len);
 
 #define IWINFO_CIPHER_NONE   (1 << 0)
 #define IWINFO_CIPHER_WEP40  (1 << 1)
@@ -100,7 +104,8 @@ enum iwinfo_htmode {
 	IWINFO_HTMODE_EHT80      = (1 << 13),
 	IWINFO_HTMODE_EHT160     = (1 << 14),
 	IWINFO_HTMODE_EHT320     = (1 << 15),
-	IWINFO_HTMODE_COUNT      = 16
+	IWINFO_HTMODE_NOHT       = (1 << 16),
+	IWINFO_HTMODE_COUNT      = 17
 };
 
 extern const char *IWINFO_HTMODE_NAMES[IWINFO_HTMODE_COUNT];
