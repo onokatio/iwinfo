@@ -571,3 +571,28 @@ out:
 
 	return rv;
 }
+
+size_t iwinfo_format_hwmodes(int modes, char *buf, size_t len)
+{
+	// bit numbers as per IWINFO_80211_*:  ad ac ax  a  b  be g  n
+	const int order[IWINFO_80211_COUNT] = { 5, 4, 6, 0, 1, 7, 2, 3 };
+	size_t res = 0;
+	int i;
+
+	*buf = 0;
+
+	if (!(modes & ((1 << IWINFO_80211_COUNT) - 1)))
+		return 0;
+
+	for (i = 0; i < IWINFO_80211_COUNT; i++)
+		if (modes & 1 << order[i])
+			res += snprintf(buf + res, len - res, "%s/", IWINFO_80211_NAMES[order[i]]);
+
+	if (res > 0)
+	{
+		res--;
+		buf[res] = 0;
+	}
+
+	return res;
+}
