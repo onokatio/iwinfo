@@ -919,6 +919,11 @@ static int __nl80211_hostapd_query(const char *ifname, ...)
 
 	snprintf(buf, sizeof(buf), "/var/run/hostapd-%s.conf", phy);
 	fp = fopen(buf, "r");
+	if (!fp && strlen(ifname) < IFNAMSIZ && !strchr(ifname, '/')) {
+		snprintf(buf, sizeof(buf), "/var/run/hostapd-%s.conf", ifname);
+		fp = fopen(buf, "r");
+	}
+
 
 	if (!fp)
 		return 0;
@@ -2145,6 +2150,8 @@ static int nl80211_get_phyname(const char *ifname, char *buf)
 static void nl80211_parse_rateinfo(struct nlattr **ri,
                                    struct iwinfo_rate_entry *re)
 {
+	re->mcs = -1;
+	re->he_gi = re->eht_gi = UINT8_MAX;
 	if (ri[NL80211_RATE_INFO_BITRATE32])
 		re->rate = nla_get_u32(ri[NL80211_RATE_INFO_BITRATE32]) * 100;
 	else if (ri[NL80211_RATE_INFO_BITRATE])
@@ -2206,6 +2213,8 @@ static void nl80211_parse_rateinfo(struct nlattr **ri,
 		re->is_short_gi = 1;
 
 	re->is_40mhz = (re->mhz == 40);
+	if (re->mcs > (re->is_eht ? 15 : re->is_he ? 11 : re->is_vht ? 9 : 31)) re->mcs = -1;
+	if (re->nss > 8) re->nss = 0;
 }
 
 static int nl80211_get_survey_cb(struct nl_msg *msg, void *arg)
@@ -2357,9 +2366,19 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		[NL80211_RATE_INFO_SHORT_GI]     = { .type = NLA_FLAG   },
 	};
 
+	static const uint16_t stats_attrs[] = { NL80211_STA_INFO_SIGNAL_AVG, NL80211_STA_INFO_INACTIVE_TIME,
+		NL80211_STA_INFO_CONNECTED_TIME, NL80211_STA_INFO_EXPECTED_THROUGHPUT, NL80211_STA_INFO_RX_PACKETS,
+		NL80211_STA_INFO_TX_PACKETS, NL80211_STA_INFO_RX_BYTES, NL80211_STA_INFO_TX_BYTES,
+		NL80211_STA_INFO_RX_DROP_MISC, NL80211_STA_INFO_TX_RETRIES, NL80211_STA_INFO_TX_FAILED };
+	static const uint8_t flag_attrs[] = { NL80211_STA_FLAG_AUTHORIZED, NL80211_STA_FLAG_AUTHENTICATED,
+		NL80211_STA_FLAG_SHORT_PREAMBLE, NL80211_STA_FLAG_WME, NL80211_STA_FLAG_MFP, NL80211_STA_FLAG_TDLS_PEER };
+	int i;
+
 	/* advance to end of array */
 	e += arr->count;
 	memset(e, 0, sizeof(*e));
+	e->rx_rate.mcs = e->tx_rate.mcs = -1;
+	e->rx_rate.he_gi = e->tx_rate.he_gi = e->rx_rate.eht_gi = e->tx_rate.eht_gi = UINT8_MAX;
 
 	if (attr[NL80211_ATTR_MAC])
 		memcpy(e->mac, nla_data(attr[NL80211_ATTR_MAC]), 6);
@@ -2368,6 +2387,10 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 	    !nla_parse_nested(sinfo, NL80211_STA_INFO_MAX,
 	                      attr[NL80211_ATTR_STA_INFO], stats_policy))
 	{
+		for (i = 0; i < ARRAY_SIZE(stats_attrs); i++)
+			if (sinfo[stats_attrs[i]]) e->stats_mask |= 1U << i;
+		if (sinfo[NL80211_STA_INFO_RX_BYTES64]) e->stats_mask |= IWINFO_ASSOC_S_RX_BYTES;
+		if (sinfo[NL80211_STA_INFO_TX_BYTES64]) e->stats_mask |= IWINFO_ASSOC_S_TX_BYTES;
 		if (sinfo[NL80211_STA_INFO_SIGNAL])
 			e->signal = nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL]);
 
@@ -2444,6 +2467,9 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		{
 			sta_flags = (struct nl80211_sta_flag_update *)
 				nla_data(sinfo[NL80211_STA_INFO_STA_FLAGS]);
+			for (i = 0; i < ARRAY_SIZE(flag_attrs); i++)
+				if (sta_flags->mask & BIT(flag_attrs[i])) e->flags_mask |= 1U << i;
+
 
 			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHORIZED) &&
 			    sta_flags->set & BIT(NL80211_STA_FLAG_AUTHORIZED))
@@ -2524,6 +2550,27 @@ static int nl80211_get_assoclist(const char *ifname, char *buf, int *len)
 	}
 
 	return -1;
+}
+
+static int nl80211_get_station_cb(struct nl_msg *msg, void *arg)
+{
+	struct nl80211_array_buf *arr = arg;
+	return arr->count ? NL_SKIP : nl80211_get_assoclist_cb(msg, arg);
+}
+
+int iwinfo_nl80211_get_station(const char *ifname, const uint8_t *mac,
+                              struct iwinfo_assoclist_entry *entry)
+{
+	struct nl80211_array_buf arr = { .buf = entry, .count = 0 };
+	struct nl80211_msg_conveyor *req = nl80211_msg(ifname, NL80211_CMD_GET_STATION, 0);
+	if (!req) return -1;
+	nla_put(req->msg, NL80211_ATTR_MAC, 6, mac);
+	if (nl80211_send(req, nl80211_get_station_cb, &arr) || arr.count != 1 ||
+	    memcmp(entry->mac, mac, 6)) return -1;
+	/* A bitrate without width/MCS attributes does not imply a 20 MHz link. */
+	if (!entry->rx_rate.is_ht && !entry->rx_rate.is_vht && !entry->rx_rate.is_he && !entry->rx_rate.is_eht) { entry->rx_rate.mhz = 0; entry->rx_rate.mcs = -1; }
+	if (!entry->tx_rate.is_ht && !entry->tx_rate.is_vht && !entry->tx_rate.is_he && !entry->tx_rate.is_eht) { entry->tx_rate.mhz = 0; entry->tx_rate.mcs = -1; }
+	return 0;
 }
 
 static int nl80211_get_txpwrlist_cb(struct nl_msg *msg, void *arg)

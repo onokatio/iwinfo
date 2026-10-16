@@ -245,6 +245,28 @@ struct iwinfo_rate_entry {
 	uint8_t eht_gi;
 };
 
+enum iwinfo_assoc_stats {
+	IWINFO_ASSOC_S_SIGNAL_AVG = 1 << 0,
+	IWINFO_ASSOC_S_INACTIVE = 1 << 1,
+	IWINFO_ASSOC_S_CONNECTED_TIME = 1 << 2,
+	IWINFO_ASSOC_S_THR = 1 << 3,
+	IWINFO_ASSOC_S_RX_PACKETS = 1 << 4,
+	IWINFO_ASSOC_S_TX_PACKETS = 1 << 5,
+	IWINFO_ASSOC_S_RX_BYTES = 1 << 6,
+	IWINFO_ASSOC_S_TX_BYTES = 1 << 7,
+	IWINFO_ASSOC_S_RX_DROP_MISC = 1 << 8,
+	IWINFO_ASSOC_S_TX_RETRIES = 1 << 9,
+	IWINFO_ASSOC_S_TX_FAILED = 1 << 10,
+};
+enum iwinfo_assoc_flags {
+	IWINFO_ASSOC_F_AUTHORIZED = 1 << 0,
+	IWINFO_ASSOC_F_AUTHENTICATED = 1 << 1,
+	IWINFO_ASSOC_F_PREAMBLE = 1 << 2,
+	IWINFO_ASSOC_F_WME = 1 << 3,
+	IWINFO_ASSOC_F_MFP = 1 << 4,
+	IWINFO_ASSOC_F_TDLS = 1 << 5,
+};
+
 struct iwinfo_assoclist_entry {
 	uint8_t	mac[6];
 	int8_t signal;
@@ -268,6 +290,8 @@ struct iwinfo_assoclist_entry {
 	uint8_t is_wme:1;
 	uint8_t is_mfp:1;
 	uint8_t is_tdls:1;
+	uint8_t flags_mask;
+	uint16_t stats_mask;
 	uint32_t thr;
 	uint16_t llid;
 	uint16_t plid;
@@ -432,6 +456,10 @@ const char * iwinfo_type(const char *ifname);
 const struct iwinfo_ops * iwinfo_backend(const char *ifname);
 const struct iwinfo_ops * iwinfo_backend_by_name(const char *name);
 void iwinfo_finish(void);
+
+extern const struct iwinfo_ops qcawificfg80211_ops;
+const char *iwinfo_qcawificfg80211_ifname(const char *name);
+int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwinfo_assoclist_entry *entry);
 
 extern const struct iwinfo_ops wext_ops;
 extern const struct iwinfo_ops madwifi_ops;
