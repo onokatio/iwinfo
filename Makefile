@@ -17,7 +17,7 @@ IWINFO_CLI_LDFLAGS = $(LDFLAGS) -L. -liwinfo
 IWINFO_CLI_OBJ     = iwinfo_cli.o
 
 
-ifneq ($(filter wl wext madwifi,$(IWINFO_BACKENDS)),)
+ifneq ($(filter wl wext madwifi qcawificfg80211,$(IWINFO_BACKENDS)),)
 	IWINFO_CFLAGS  += -DUSE_WEXT
 	IWINFO_LIB_OBJ += iwinfo_wext.o iwinfo_wext_scan.o
 endif
@@ -39,6 +39,10 @@ ifneq ($(filter nl80211,$(IWINFO_BACKENDS)),)
 	IWINFO_LIB_OBJ     += iwinfo_nl80211.o
 endif
 
+ifneq ($(filter qcawificfg80211,$(IWINFO_BACKENDS)),)
+	IWINFO_CFLAGS += -DUSE_QCA
+	IWINFO_LIB_OBJ += iwinfo_qcawificfg80211.o
+endif
 
 compile: clean $(IWINFO_LIB) $(IWINFO_LUA) $(IWINFO_CLI)
 
