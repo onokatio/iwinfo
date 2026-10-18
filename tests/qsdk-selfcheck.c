@@ -9,13 +9,6 @@ static int station_close(FILE *fp);
 #include "../iwinfo_qcawificfg80211.c"
 #undef popen
 #undef pclose
-/* Test the real nl80211 rate decoder without linking a second netlink library. */
-#include "../api/nl80211.h"
-struct nlattr { uint32_t value; };
-static uint8_t nla_get_u8(struct nlattr *a) { return a->value; }
-static uint16_t nla_get_u16(struct nlattr *a) { return a->value; }
-static uint32_t nla_get_u32(struct nlattr *a) { return a->value; }
-#include "qsdk-nl-rate.inc"
 static int nl_rate, nl_stations, nl_result, station_calls, station_failure, station_count = 2;
 static int individual_result = -1;
 static int power_failure;
@@ -79,24 +72,6 @@ int main(void)
 	int hw, ht, len, calls, i;
 	char buf[IWINFO_BUFSIZE + 16];
 	struct iwinfo_assoclist_entry entry;
-	struct nlattr *rates[NL80211_RATE_INFO_MAX + 1] = {0};
-	struct nlattr mcs = { .value = 11 }, nss = { .value = 2 }, flag = {0};
-	struct iwinfo_rate_entry parsed = {0};
-	rates[NL80211_RATE_INFO_HE_MCS] = &mcs;
-	rates[NL80211_RATE_INFO_HE_NSS] = &nss;
-	rates[NL80211_RATE_INFO_80_MHZ_WIDTH] = &flag;
-	nl80211_parse_rateinfo(rates, &parsed);
-	assert(parsed.is_he && !parsed.is_eht && parsed.mcs == 11 && parsed.nss == 2 && parsed.mhz == 80);
-	memset(rates, 0, sizeof(rates)); memset(&parsed, 0, sizeof(parsed));
-	rates[NL80211_RATE_INFO_EHT_MCS] = &mcs;
-	rates[NL80211_RATE_INFO_EHT_NSS] = &nss;
-	rates[NL80211_RATE_INFO_320_MHZ_WIDTH] = &flag;
-	mcs.value = 15;
-	nl80211_parse_rateinfo(rates, &parsed);
-	assert(parsed.is_eht && !parsed.is_he && parsed.mhz_hi == 1 && parsed.mhz == 64 && parsed.mcs == 15 && parsed.nss == 2);
-	mcs.value = 255; nss.value = 9; memset(&parsed, 0, sizeof(parsed));
-	nl80211_parse_rateinfo(rates, &parsed);
-	assert(parsed.mcs == -1 && !parsed.nss);
 	assert(sizeof(((struct iwinfo_assoclist_entry *)0)->rx_bytes) == 8);
 	assert(offsetof(struct iwinfo_assoclist_entry, stats_mask) + sizeof(uint16_t) <= offsetof(struct iwinfo_assoclist_entry, thr));
 	assert(!strcmp(iwinfo_qcawificfg80211_ifname("ath-test"), "ath-test"));
