@@ -282,11 +282,25 @@ static void qca_parse_modes(const char *modes, int *hw, int *ht)
 	for (i = 0; i < sizeof(widths) / sizeof(widths[0]); i++)
 		if (strstr(modes, widths[i].token)) *ht |= widths[i].ht;
 }
+/* Native hwmodes may include modes which cannot run on this radio's band. */
+static void qca_restrict_modes(int bands, int *hw, int *ht)
+{
+	if (bands == IWINFO_BAND_6) *hw &= IWINFO_80211_AX | IWINFO_80211_BE;
+	if (bands == IWINFO_BAND_24)
+		*ht &= IWINFO_HTMODE_HT20 | IWINFO_HTMODE_HT40 | IWINFO_HTMODE_HE20 |
+			IWINFO_HTMODE_HE40 | IWINFO_HTMODE_EHT20 | IWINFO_HTMODE_EHT40;
+}
 static int qca_modelist(const char *name, int *hw, int *ht)
 {
-	char radio[IFNAMSIZ], modes[2048];
+	char radio[IFNAMSIZ], modes[2048], frequencies[IWINFO_BUFSIZE];
+	int length = sizeof(frequencies), bands = 0, i;
 	if (qca_radio(name, radio) || qca_read(radio, "hwmodes", modes, sizeof(modes))) return -1;
 	qca_parse_modes(modes, hw, ht);
+	if (!qca_freqlist(name, frequencies, &length)) {
+		for (i = 0; i + sizeof(struct iwinfo_freqlist_entry) <= length; i += sizeof(struct iwinfo_freqlist_entry))
+			bands |= ((struct iwinfo_freqlist_entry *)(frequencies + i))->band;
+		qca_restrict_modes(bands, hw, ht);
+	}
 	return 0;
 }
 static int qca_hwmodelist(const char *name, int *buf) { int ht; return qca_modelist(name, buf, &ht); }
