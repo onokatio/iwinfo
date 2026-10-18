@@ -93,7 +93,24 @@ QCA_NUM(txpower_offset) QCA_NUM(signal)
 QCA_NUM(noise) QCA_NUM(quality) QCA_NUM(quality_max) QCA_NUM(mbssid_support)
 QCA_STR(ssid) QCA_STR(bssid) QCA_STR(hardware_id)
 QCA_STR(hardware_name) QCA_STR(encryption) QCA_STR(phyname) QCA_STR(lookup_phy)
-QCA_LIST(txpwrlist) QCA_LIST(freqlist) QCA_LIST(countrylist) QCA_LIST(survey)
+QCA_LIST(txpwrlist) QCA_LIST(countrylist) QCA_LIST(survey)
+
+static int qca_freqlist(const char *name, char *buf, int *len)
+{
+	const char *vif = iwinfo_qcawificfg80211_ifname(name);
+	struct iwinfo_freqlist_entry *entry;
+	int i, rv;
+	if (!vif) return -1;
+	rv = nl80211_ops.freqlist(vif, buf, len);
+	if (rv) return rv;
+	/* QSDK's netlink band identifiers can disagree with the reported frequency. */
+	for (i = 0; i + sizeof(*entry) <= *len; i += sizeof(*entry)) {
+		entry = (struct iwinfo_freqlist_entry *)(buf + i);
+		entry->band = entry->mhz >= 57000 ? IWINFO_BAND_60 :
+			entry->mhz >= 5925 ? IWINFO_BAND_6 : entry->mhz >= 4900 ? IWINFO_BAND_5 : IWINFO_BAND_24;
+	}
+	return 0;
+}
 
 static int qca_txpower(const char *name, int *buf)
 {
@@ -146,6 +163,7 @@ static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *en
 	for (i = 0; i < 17; i++)
 		if (i % 3 == 2 ? mac[i] != ':' : !isxdigit((unsigned char)mac[i])) return -1;
 	memset(entry, 0, sizeof(*entry));
+	entry->stats_mask = IWINFO_ASSOC_S_VALID;
 	for (i = 0; i < 6; i++) entry->mac[i] = strtoul(mac + 3 * i, NULL, 16);
 	entry->signal = signal;
 	entry->rx_rate.rate = rx_rate * 1000;

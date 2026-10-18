@@ -246,6 +246,8 @@ struct iwinfo_rate_entry {
 };
 
 enum iwinfo_assoc_stats {
+	/* Without this bit, consumers retain the legacy all-fields behavior. */
+	IWINFO_ASSOC_S_VALID = 1 << 15,
 	IWINFO_ASSOC_S_SIGNAL_AVG = 1 << 0,
 	IWINFO_ASSOC_S_INACTIVE = 1 << 1,
 	IWINFO_ASSOC_S_CONNECTED_TIME = 1 << 2,

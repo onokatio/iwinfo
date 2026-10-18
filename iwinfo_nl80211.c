@@ -2377,6 +2377,7 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 	/* advance to end of array */
 	e += arr->count;
 	memset(e, 0, sizeof(*e));
+	e->stats_mask = IWINFO_ASSOC_S_VALID;
 	e->rx_rate.mcs = e->tx_rate.mcs = -1;
 	e->rx_rate.he_gi = e->tx_rate.he_gi = e->rx_rate.eht_gi = e->tx_rate.eht_gi = UINT8_MAX;
 
