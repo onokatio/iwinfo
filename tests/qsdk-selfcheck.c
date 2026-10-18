@@ -116,6 +116,15 @@ int main(void)
 	assert(!qca_bitrate("ath-test", &hw) && hw == 2882000);
 	nl_rate = 1200000;
 	assert(!qca_bitrate("ath-test", &hw) && hw == 1200000);
+	for (i = 0; i < 5; i++) {
+		int bands[] = { IWINFO_BAND_24, IWINFO_BAND_5, IWINFO_BAND_6, IWINFO_BAND_24 | IWINFO_BAND_5, 0 };
+		hw = IWINFO_80211_A | IWINFO_80211_N | IWINFO_80211_AX | IWINFO_80211_BE;
+		ht = IWINFO_HTMODE_HT40 | IWINFO_HTMODE_HE160 | IWINFO_HTMODE_EHT320;
+		qca_restrict_modes(bands[i], &hw, &ht);
+		assert(hw == (i == 2 ? IWINFO_80211_AX | IWINFO_80211_BE : IWINFO_80211_A | IWINFO_80211_N | IWINFO_80211_AX | IWINFO_80211_BE));
+		assert(ht == (i == 0 ? IWINFO_HTMODE_HT40 : IWINFO_HTMODE_HT40 | IWINFO_HTMODE_HE160 | IWINFO_HTMODE_EHT320));
+	}
+
 	qca_parse_modes("11AXA_HE20 11AXA_HE160 11BEA_EHT20 11BEA_EHT320", &hw, &ht);
 	assert((hw & (IWINFO_80211_AX | IWINFO_80211_BE)) == (IWINFO_80211_AX | IWINFO_80211_BE));
 	assert(ht & IWINFO_HTMODE_EHT320);
