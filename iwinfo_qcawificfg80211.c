@@ -163,7 +163,6 @@ static int qca_parse_station(const char *line, struct iwinfo_assoclist_entry *en
 	for (i = 0; i < 17; i++)
 		if (i % 3 == 2 ? mac[i] != ':' : !isxdigit((unsigned char)mac[i])) return -1;
 	memset(entry, 0, sizeof(*entry));
-	entry->stats_mask = IWINFO_ASSOC_S_VALID;
 	for (i = 0; i < 6; i++) entry->mac[i] = strtoul(mac + 3 * i, NULL, 16);
 	entry->signal = signal;
 	entry->rx_rate.rate = rx_rate * 1000;
