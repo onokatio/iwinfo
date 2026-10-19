@@ -20,7 +20,6 @@ int iwinfo_nl80211_get_station(const char *name, const uint8_t *mac, struct iwin
 	entry->rx_rate.rate = 2135200;
 	entry->rx_rate.mcs = entry->tx_rate.mcs = -1;
 	entry->rx_packets = 11;
-	entry->stats_mask = IWINFO_ASSOC_S_VALID | IWINFO_ASSOC_S_RX_PACKETS;
 	return individual_result;
 }
 static int native_bitrate(const char *name, int *buf) { *buf = nl_rate; return 0; }
@@ -43,7 +42,7 @@ static int native_freqlist(const char *name, char *buf, int *len)
 }
 static int native_assoclist(const char *name, char *buf, int *len)
 {
-	struct iwinfo_assoclist_entry entry = { .signal = -60, .stats_mask = IWINFO_ASSOC_S_VALID };
+	struct iwinfo_assoclist_entry entry = { .signal = -60 };
 	*len = nl_stations ? sizeof(entry) : 0;
 	if (*len) memcpy(buf, &entry, *len);
 	return nl_result;
@@ -87,7 +86,6 @@ int main(void)
 	char buf[IWINFO_BUFSIZE + 16];
 	struct iwinfo_assoclist_entry entry;
 	assert(sizeof(((struct iwinfo_assoclist_entry *)0)->rx_bytes) == 8);
-	assert(offsetof(struct iwinfo_assoclist_entry, stats_mask) + sizeof(uint16_t) <= offsetof(struct iwinfo_assoclist_entry, thr));
 	assert(!qca_freqlist("ath-test", buf, &len));
 	assert(len == 4 * sizeof(struct iwinfo_freqlist_entry));
 	for (i = 0; i < 4; i++) {
@@ -134,7 +132,6 @@ int main(void)
 	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48", &entry));
 	assert(entry.mac[5] == 1 && entry.signal == -48 && entry.tx_rate.rate == 2882000);
 	assert(entry.rx_rate.rate == 1441000 && entry.rx_rate.mcs == -1);
-	assert(entry.stats_mask == IWINFO_ASSOC_S_VALID && !entry.flags_mask);
 	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48 padding IEEE80211_MODE_11AXA_HE80 2 2 0", &entry));
 	assert(entry.rx_rate.is_he && entry.rx_rate.mhz == 80 && entry.rx_rate.nss == 2 && entry.rx_rate.mcs == -1);
 	assert(!qca_parse_station("02:00:00:00:00:01 1 36 2882M 1441M -48 IEEE80211_MODE_11BEA_EHT320 2 2 0", &entry));
@@ -154,7 +151,6 @@ int main(void)
 	assert(!qca_assoclist("ath-test", buf, &len));
 	memcpy(&entry, buf, sizeof(entry));
 	assert(entry.rx_packets == 11 && entry.signal == -45 && entry.rx_rate.rate == 1441000);
-	assert(entry.stats_mask == (IWINFO_ASSOC_S_VALID | IWINFO_ASSOC_S_RX_PACKETS) && !entry.flags_mask);
 	individual_result = -1;
 	nl_stations = 1;
 	calls = station_calls;

@@ -2366,18 +2366,9 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		[NL80211_RATE_INFO_SHORT_GI]     = { .type = NLA_FLAG   },
 	};
 
-	static const uint16_t stats_attrs[] = { NL80211_STA_INFO_SIGNAL_AVG, NL80211_STA_INFO_INACTIVE_TIME,
-		NL80211_STA_INFO_CONNECTED_TIME, NL80211_STA_INFO_EXPECTED_THROUGHPUT, NL80211_STA_INFO_RX_PACKETS,
-		NL80211_STA_INFO_TX_PACKETS, NL80211_STA_INFO_RX_BYTES, NL80211_STA_INFO_TX_BYTES,
-		NL80211_STA_INFO_RX_DROP_MISC, NL80211_STA_INFO_TX_RETRIES, NL80211_STA_INFO_TX_FAILED };
-	static const uint8_t flag_attrs[] = { NL80211_STA_FLAG_AUTHORIZED, NL80211_STA_FLAG_AUTHENTICATED,
-		NL80211_STA_FLAG_SHORT_PREAMBLE, NL80211_STA_FLAG_WME, NL80211_STA_FLAG_MFP, NL80211_STA_FLAG_TDLS_PEER };
-	int i;
-
 	/* advance to end of array */
 	e += arr->count;
 	memset(e, 0, sizeof(*e));
-	e->stats_mask = IWINFO_ASSOC_S_VALID;
 	e->rx_rate.mcs = e->tx_rate.mcs = -1;
 	e->rx_rate.he_gi = e->tx_rate.he_gi = e->rx_rate.eht_gi = e->tx_rate.eht_gi = UINT8_MAX;
 
@@ -2388,10 +2379,6 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 	    !nla_parse_nested(sinfo, NL80211_STA_INFO_MAX,
 	                      attr[NL80211_ATTR_STA_INFO], stats_policy))
 	{
-		for (i = 0; i < ARRAY_SIZE(stats_attrs); i++)
-			if (sinfo[stats_attrs[i]]) e->stats_mask |= 1U << i;
-		if (sinfo[NL80211_STA_INFO_RX_BYTES64]) e->stats_mask |= IWINFO_ASSOC_S_RX_BYTES;
-		if (sinfo[NL80211_STA_INFO_TX_BYTES64]) e->stats_mask |= IWINFO_ASSOC_S_TX_BYTES;
 		if (sinfo[NL80211_STA_INFO_SIGNAL])
 			e->signal = nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL]);
 
@@ -2468,10 +2455,6 @@ static int nl80211_get_assoclist_cb(struct nl_msg *msg, void *arg)
 		{
 			sta_flags = (struct nl80211_sta_flag_update *)
 				nla_data(sinfo[NL80211_STA_INFO_STA_FLAGS]);
-			for (i = 0; i < ARRAY_SIZE(flag_attrs); i++)
-				if (sta_flags->mask & BIT(flag_attrs[i])) e->flags_mask |= 1U << i;
-
-
 			if (sta_flags->mask & BIT(NL80211_STA_FLAG_AUTHORIZED) &&
 			    sta_flags->set & BIT(NL80211_STA_FLAG_AUTHORIZED))
 				e->is_authorized = 1;

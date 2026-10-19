@@ -38,8 +38,7 @@ int main(void)
 	nla_nest_end(msg, info);
 	nl80211_get_assoclist_cb(msg, &stations);
 	assert(stations.count == 1 && !memcmp(station.mac, mac, sizeof(mac)));
-	assert(station.stats_mask == (IWINFO_ASSOC_S_VALID | IWINFO_ASSOC_S_RX_PACKETS));
-	assert(station.flags_mask == IWINFO_ASSOC_F_AUTHORIZED && !station.is_authorized && !station.rx_packets);
+	assert(!station.is_authorized && !station.rx_packets);
 	assert(station.rx_rate.mcs == -1 && station.tx_rate.eht_gi == UINT8_MAX);
 	nlmsg_free(msg);
 	decode(NL80211_RATE_INFO_HE_MCS, NL80211_RATE_INFO_80_MHZ_WIDTH, 11, 2, &rate);
@@ -54,6 +53,6 @@ int main(void)
 	assert(nl80211_freq2channel(5935) == 2);
 	assert(nl80211_freq2channel(5955) == 1);
 	assert(nl80211_freq2channel(7115) == 233);
-	puts("PASS: full nl80211 translation unit, real libnl-tiny attributes; optional station metadata, HE/EHT, 320 MHz, invalid MCS/NSS, all six channel edges");
+	puts("PASS: full nl80211 translation unit, real libnl-tiny attributes; station decoding, HE/EHT, 320 MHz, invalid MCS/NSS, all six channel edges");
 	return 0;
 }
